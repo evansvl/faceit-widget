@@ -47,22 +47,37 @@ log = logging.getLogger("faceit-widget")
 FACEIT_BASE = "https://open.faceit.com/data/v4"
 DISCORD_BASE = "https://discord.com/api/v9"
 
-MAPS_RAW_BASE = "https://raw.githubusercontent.com/ghostcap-gaming/cs2-map-images/main/cs2"
+MAPS_CDN_BASE = "https://raw.githubusercontent.com/evansvl/faceit-widget/master/maps"
 LEVELS_CDN_BASE = "https://raw.githubusercontent.com/evansvl/faceit-levels/main"
+
+MAPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps")
 
 LEVEL_CEIL = {1: 500, 2: 750, 3: 900, 4: 1050, 5: 1200,
               6: 1350, 7: 1530, 8: 1750, 9: 2000}
 
 CALIB_TOTAL = 10
 
+FALLBACK_MAP = "de_dust2"
+
+
+def available_maps() -> set:
+    try:
+        return {os.path.splitext(f)[0] for f in os.listdir(MAPS_DIR) if f.endswith(".webp")}
+    except OSError:
+        return set()
+
+
+AVAILABLE_MAPS = available_maps()
+
 
 def square(url: str, size: int = 512) -> str:
     return f"https://wsrv.nl/?url={quote(url, safe='')}&w={size}&h={size}&fit=cover&output=png"
 
 
-def map_widget_image(url: str, size: int = 512) -> str:
-    return (f"https://wsrv.nl/?url={quote(url, safe='')}"
-            f"&w={size}&h={size}&fit=cover&a=top&output=png")
+def map_widget_image(map_key: str) -> str:
+    if map_key not in AVAILABLE_MAPS:
+        map_key = FALLBACK_MAP
+    return f"{MAPS_CDN_BASE}/{map_key}.webp"
 
 
 def fetch_faceit_data(client: httpx.Client) -> dict:
@@ -111,13 +126,12 @@ def fetch_faceit_data(client: httpx.Client) -> dict:
                         elo_change = "+25" if stats.get("Result", "0") == "1" else "-25"
 
     if raw_map_name != "unknown":
-        raw_url = f"{MAPS_RAW_BASE}/{raw_map_name}.png"
-        display = raw_map_name[3:] if raw_map_name.startswith("de_") else raw_map_name
+        display = raw_map_name[3:] if raw_map_name.startswith(("de_", "cs_")) else raw_map_name
         clean_map_name = display.capitalize()
+        map_img_url = map_widget_image(raw_map_name)
     else:
-        raw_url = f"{MAPS_RAW_BASE}/de_dust2.png"
         clean_map_name = "Unknown"
-    map_img_url = map_widget_image(raw_url)
+        map_img_url = map_widget_image(FALLBACK_MAP)
 
     if calibrating:
         level_value = 0

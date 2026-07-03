@@ -290,22 +290,33 @@ template must expose fields with the same names or they are ignored:
 - Number (`type 2`): `current`, `max` — the progress bar
 - Image (`type 3`): `map_image`, `level_image`
 
-Level icons come from `evansvl/faceit-levels`, map art from
-`ghostcap-gaming/cs2-map-images`.
+Level icons come from `evansvl/faceit-levels`. Map images are pre-rendered and
+served from this repo's `maps/` folder (see below).
 
 ## Map image cropping
 
-Map art is not used raw. It runs through wsrv.nl as a single square cover-crop
-anchored to the top of the image (`fit=cover&a=top`), so the top of the map is
-kept and the widget's rounded top edge sits over clean image rather than an
-awkward seam. See `map_widget_image`.
+Discord's widget image field takes a URL, not a file, so the crop cannot be done
+live in the worker. Instead the map art is pre-rendered once and hosted in
+`maps/`, and `faceit.py` just points `map_image` at
+`raw.githubusercontent.com/.../maps/<map>.webp`.
 
-The [D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F) tool also lays a ~17px
-transparent strip over the top. That step needs two chained image operations
-(crop, then pad) and wsrv.nl refuses to proxy its own output, so it cannot be
-reproduced in a single URL. The strip is ~3% of the frame and barely visible; if
-you want it exactly, pre-process the map images offline with D.W.I.F and host
-them (the same way the fallback Application Assets are prepared).
+`dwif.py` is a Python port of [D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F):
+it lays a transparent strip over the top, shifts the image down, crops the
+bottom by the same amount, and rounds the top-right corner — the top strip and
+radius auto-scale with resolution (17px / 36px at 512x512, 54px / 172px at
+1844x853, the widget hero size). `build_maps.py` downloads the CS2 maps from
+`ghostcap-gaming/cs2-map-images`, cover-crops each to the 1844x853 hero aspect,
+runs `widget_fix`, and writes `maps/<map>.webp`.
+
+Regenerate or extend the set (needs `pip install pillow httpx`):
+
+```sh
+python build_maps.py
+```
+
+Edit the `MAPS` list in `build_maps.py` to add maps, then commit the new files.
+`faceit.py` serves whatever is in `maps/`; anything it does not have falls back
+to `de_dust2`.
 
 ## Season reset
 
