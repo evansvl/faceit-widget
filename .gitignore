@@ -3,6 +3,7 @@ __pycache__/
 .env
 .venv/
 venv/
+*.zip
 
 steam_cs.py
 steam_dota.py

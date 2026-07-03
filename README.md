@@ -55,33 +55,57 @@ page, and the **Widget** section appears.
 
 ### 4. Build the widget layout
 
-Add fields whose names match exactly what the script sends. A layout that fits
-the data this worker produces:
+This is where you tell Discord which live value goes into which slot. Every
+dynamic value is wired the same way: set the component's **Value Type** to
+**User Data** and type the **Data Field** name exactly as the script sends it.
+A field name that does not match is simply never filled.
 
-**Hero section (top)**
+Optionally set a **Fallback** per field — shown before the first update lands
+(or if a value is missing). A fallback is either a **Custom String** or an
+**Application Asset** (an image you upload to the app under Rich Presence → Art
+Assets, referenced by its Asset Key).
 
-| Component | Field name | What shows up |
-|-----------|------------|---------------|
-| Image | `map_image` | Last match map, cropped to sit under the rounded top |
-| Title | `username` | Your FACEIT nickname |
-| Subtitle 1 | `sub_1` | Level label, e.g. `Level 8` / `Calibration` |
-| Subtitle 2 | `sub_2` | e.g. `120 Elo from Level 9` |
-| Subtitle 3 | `sub_3` | e.g. `Current Elo: 1830` |
-| Progress bar | `current` / `max` | Elo progress inside the level (numbers) |
+The layout below is exactly the reference widget. `Custom String` means a fixed
+label you type in, not a data field.
 
-**Stats / secondary**
+**Image** (hero)
 
-| Component | Field name | What shows up |
-|-----------|------------|---------------|
-| Image | `level_image` | FACEIT level icon |
-| Stat | `map_name` | Map name, e.g. `Mirage` |
-| Stat | `kda` | Kills/Deaths/Assists of the last match |
-| Stat | `elo_change` | `+25` / `-25` |
-| Stat | `status` | `Current Elo: 1830` or `Calibration in progress` |
+| Field | Value Type | Data Field | Fallback |
+|-------|-----------|------------|----------|
+| Image | User Data | `map_image` | Application Asset, key `mirage` |
 
-`current` and `max` must be **number** fields or the progress bar will not
-render. Everything else is text, except `map_image` / `level_image` which are
-images.
+**Title**
+
+| Field | Value Type | Content |
+|-------|-----------|---------|
+| Text | Custom String | `Last Played Match:` |
+
+**Subtitle 1 / 2 / 3** — each has a fixed Label plus a User Data value:
+
+| Component | Label (Custom String) | Value Type | Data Field | Fallback |
+|-----------|-----------------------|-----------|------------|----------|
+| Subtitle 1 | `Map` | User Data | `map_name` | `Mirage` |
+| Subtitle 2 | `K/D/A` | User Data | `kda` | `24/19/12` |
+| Subtitle 3 | `Elo Change` | User Data | `elo_change` | `+21` |
+
+**Objective**
+
+| Field | Value Type | Data Field | Fallback |
+|-------|-----------|------------|----------|
+| Image | User Data | `level_image` | Application Asset, key `lvl9` |
+| Name | User Data | `sub_1` | `Level: 9` |
+| Description | User Data | `sub_2` | `19 Elo from Level 10` |
+
+**Progress**
+
+| Field | Value Type | Data Field |
+|-------|-----------|------------|
+| Current Value | User Data | `current` |
+| Max Value | User Data | `max` |
+
+`current` and `max` are numbers — the elo progress bar inside the current level.
+The script also sends `sub_3` and `status`; the reference widget does not use
+them, but they are there if you want to add more slots.
 
 ### 5. Publish
 
@@ -120,7 +144,7 @@ your own avatar → **Copy User ID**. This is `USER_ID`.
 
 ## Running
 
-All values come from environment variables. The script refuses to start if any
+All config comes from environment variables. The script refuses to start if any
 required one is missing.
 
 | Variable | Required | What it is |
@@ -131,6 +155,34 @@ required one is missing.
 | `APP_ID` | yes | Discord application ID |
 | `USER_ID` | yes | Your Discord user ID |
 | `INTERVAL` | no | Seconds between updates, defaults to `120` |
+| `SEASON_START` | no | Season start as a unix timestamp, see [Season reset](#season-reset) |
+
+### Using a .env file (easiest)
+
+On startup the script loads a `.env` file sitting next to `faceit.py`, so you do
+not have to export anything by hand. Real environment variables still win over
+`.env`, so it is safe on a server too. Create `.env`:
+
+```
+FACEIT_API_KEY=your-server-side-key
+FACEIT_NICKNAME=your-nickname
+DISCORD_BOT_TOKEN=your-bot-token
+APP_ID=your-application-id
+USER_ID=your-discord-user-id
+# optional
+INTERVAL=120
+SEASON_START=1776816000
+```
+
+Then just:
+
+```sh
+python faceit.py
+```
+
+`.env` is gitignored — keep your keys in it, not in the code.
+
+### Or export the variables
 
 sh / bash:
 
@@ -243,14 +295,23 @@ Level icons come from `evansvl/faceit-levels`, map art from
 
 ## Map image cropping
 
-Map art is not used raw. It is passed through wsrv.nl with the crop geometry
-ported from [D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F): a small transparent
-strip is added on top (17px at a 512x512 reference, scaled by
-`sizeFactor^0.678`), the image is shifted down and bottom-cropped so it sits
-cleanly under the widget's rounded top edge. See `map_widget_image`.
+Map art is not used raw. It runs through wsrv.nl as a single square cover-crop
+anchored to the top of the image (`fit=cover&a=top`), so the top of the map is
+kept and the widget's rounded top edge sits over clean image rather than an
+awkward seam. See `map_widget_image`.
+
+The [D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F) tool also lays a ~17px
+transparent strip over the top. That step needs two chained image operations
+(crop, then pad) and wsrv.nl refuses to proxy its own output, so it cannot be
+reproduced in a single URL. The strip is ~3% of the frame and barely visible; if
+you want it exactly, pre-process the map images offline with D.W.I.F and host
+them (the same way the fallback Application Assets are prepared).
 
 ## Season reset
 
-`SEASON_START` is a hardcoded unix timestamp used to count placement matches for
-the calibration state. Update it once per FACEIT season (roughly every four
-months).
+FACEIT counts 10 placement matches per season for calibration, and its public
+Data API does not expose season boundaries (checked: the player object carries
+no season or placement data). So the season start is a `SEASON_START` unix
+timestamp you provide via the environment, defaulting to Season 8
+(`1776816000`, 2026-04-22 UTC). Update it once per season, roughly every four
+months — set `SEASON_START` in `.env` and restart, no code change.

@@ -6,9 +6,28 @@ from urllib.parse import quote
 
 DEFAULTS = {
     "INTERVAL": "120",
+    "SEASON_START": "1776816000",
 }
 
 REQUIRED = ("FACEIT_API_KEY", "FACEIT_NICKNAME", "DISCORD_BOT_TOKEN", "APP_ID", "USER_ID")
+
+
+def load_env(path: str = None) -> None:
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):]
+            if "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
 
 def cfg(key: str) -> str:
@@ -36,21 +55,14 @@ LEVEL_CEIL = {1: 500, 2: 750, 3: 900, 4: 1050, 5: 1200,
 
 CALIB_TOTAL = 10
 
-SEASON_START = 1776816000
-
 
 def square(url: str, size: int = 512) -> str:
     return f"https://wsrv.nl/?url={quote(url, safe='')}&w={size}&h={size}&fit=cover&output=png"
 
 
 def map_widget_image(url: str, size: int = 512) -> str:
-    size_factor = size / 512
-    top_strip = max(0, round(17 * size_factor ** 0.678))
-    strip_h = size - top_strip
-    inner = (f"https://wsrv.nl/?url={quote(url, safe='')}"
-             f"&w={size}&h={strip_h}&fit=cover&a=focal&fpx=0.5&fpy=0&output=png")
-    return (f"https://wsrv.nl/?url={quote(inner, safe='')}"
-            f"&w={size}&h={size}&fit=contain&a=bottom&cbg=transparent&output=png")
+    return (f"https://wsrv.nl/?url={quote(url, safe='')}"
+            f"&w={size}&h={size}&fit=cover&a=top&output=png")
 
 
 def fetch_faceit_data(client: httpx.Client) -> dict:
@@ -74,7 +86,8 @@ def fetch_faceit_data(client: httpx.Client) -> dict:
     h_req.raise_for_status()
     items = h_req.json().get("items", [])
 
-    season_matches = sum(1 for it in items if int(it.get("finished_at", 0)) >= SEASON_START)
+    season_start = int(cfg("SEASON_START"))
+    season_matches = sum(1 for it in items if int(it.get("finished_at", 0)) >= season_start)
     calibrating = season_matches < CALIB_TOTAL
 
     raw_map_name = "unknown"
@@ -186,6 +199,7 @@ def push_to_discord(client: httpx.Client, payload: dict) -> None:
 
 
 def main():
+    load_env()
     interval = int(cfg("INTERVAL"))
     with httpx.Client(timeout=20) as client:
         while True:
