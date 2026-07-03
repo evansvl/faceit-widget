@@ -59,6 +59,8 @@ CALIB_TOTAL = 10
 
 FALLBACK_MAP = "de_dust2"
 
+MAPS_VERSION = "2"
+
 
 def available_maps() -> set:
     try:
@@ -77,7 +79,7 @@ def square(url: str, size: int = 512) -> str:
 def map_widget_image(map_key: str) -> str:
     if map_key not in AVAILABLE_MAPS:
         map_key = FALLBACK_MAP
-    return f"{MAPS_CDN_BASE}/{map_key}.webp"
+    return f"{MAPS_CDN_BASE}/{map_key}.webp?v={MAPS_VERSION}"
 
 
 def fetch_faceit_data(client: httpx.Client) -> dict:
