@@ -4,7 +4,7 @@ import httpx
 from PIL import Image, ImageOps
 from dwif import widget_fix
 
-TARGET = (1844, 853)
+TARGET = (512, 512)
 SRC_BASE = "https://raw.githubusercontent.com/ghostcap-gaming/cs2-map-images/main/cs2"
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps")
 

@@ -303,10 +303,10 @@ live in the worker. Instead the map art is pre-rendered once and hosted in
 `dwif.py` is a Python port of [D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F):
 it lays a transparent strip over the top, shifts the image down, crops the
 bottom by the same amount, and rounds the top-right corner — the top strip and
-radius auto-scale with resolution (17px / 36px at 512x512, 54px / 172px at
-1844x853, the widget hero size). `build_maps.py` downloads the CS2 maps from
-`ghostcap-gaming/cs2-map-images`, cover-crops each to the 1844x853 hero aspect,
-runs `widget_fix`, and writes `maps/<map>.webp`.
+radius auto-scale with resolution (17px / 36px at 512x512). `build_maps.py`
+downloads the CS2 maps from `ghostcap-gaming/cs2-map-images`, cover-crops each
+to a 512x512 square, runs `widget_fix`, and writes `maps/<map>.webp`. The widget
+hero is square, so change `TARGET` in `build_maps.py` if yours differs.
 
 Regenerate or extend the set (needs `pip install pillow httpx`):
 
