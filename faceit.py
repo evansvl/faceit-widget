@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import logging
 import httpx
 from urllib.parse import quote
@@ -47,6 +48,8 @@ log = logging.getLogger("faceit-widget")
 FACEIT_BASE = "https://open.faceit.com/data/v4"
 DISCORD_BASE = "https://discord.com/api/v9"
 
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".faceit_state.json")
+
 MAPS_CDN_BASE = "https://raw.githubusercontent.com/evansvl/faceit-widget/master/maps"
 LEVELS_CDN_BASE = "https://raw.githubusercontent.com/evansvl/faceit-levels/main"
 
@@ -82,6 +85,46 @@ def map_widget_image(map_key: str) -> str:
     return f"{MAPS_CDN_BASE}/{map_key}.webp?v={MAPS_VERSION}"
 
 
+def load_state() -> dict:
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except OSError as e:
+        log.warning("Could not persist elo state: %r", e)
+
+
+def compute_elo_change(match_id: str, current_elo: int, won: bool) -> str:
+    state = load_state()
+    # "elo before the current match" baseline; fall back to legacy "elo" field.
+    base = state.get("base_elo", state.get("elo"))
+
+    if match_id and match_id != state.get("match_id"):
+        # New match: its baseline is the elo we saw during the previous match.
+        base = state.get("last_elo", state.get("elo"))
+
+    if base is not None:
+        d = current_elo - int(base)
+        change = f"+{d}" if d >= 0 else str(d)
+    else:
+        change = "+25" if won else "-25"
+
+    save_state({
+        "match_id": match_id,
+        "base_elo": base,
+        "last_elo": current_elo,
+        "elo_change": change,
+    })
+    return change
+
+
 def fetch_faceit_data(client: httpx.Client) -> dict:
     headers = {"Authorization": f"Bearer {cfg('FACEIT_API_KEY')}"}
     nick = cfg("FACEIT_NICKNAME")
@@ -112,6 +155,7 @@ def fetch_faceit_data(client: httpx.Client) -> dict:
     elo_change = "0"
     if items:
         match_id = items[0].get("match_id")
+        won = False
         m_req = client.get(f"{FACEIT_BASE}/matches/{match_id}/stats", headers=headers)
         if m_req.status_code == 200:
             round0 = m_req.json().get("rounds", [{}])[0]
@@ -125,7 +169,8 @@ def fetch_faceit_data(client: httpx.Client) -> dict:
                             f"{stats.get('Deaths', '0')}/"
                             f"{stats.get('Assists', '0')}"
                         )
-                        elo_change = "+25" if stats.get("Result", "0") == "1" else "-25"
+                        won = stats.get("Result", "0") == "1"
+        elo_change = compute_elo_change(match_id, current_elo, won)
 
     if raw_map_name != "unknown":
         display = raw_map_name[3:] if raw_map_name.startswith(("de_", "cs_")) else raw_map_name

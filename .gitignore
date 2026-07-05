@@ -4,9 +4,11 @@ __pycache__/
 .venv/
 venv/
 *.zip
+.faceit_state.json
 
 steam_cs.py
 steam_dota.py
 valorant.py
 test.py
 levels/
+deploy/
