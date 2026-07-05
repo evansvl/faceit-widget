@@ -1,8 +1,8 @@
 import os
 import time
-import json
 import logging
 import httpx
+from curl_cffi import requests as cffi_requests
 from urllib.parse import quote
 
 DEFAULTS = {
@@ -46,9 +46,8 @@ logging.basicConfig(
 log = logging.getLogger("faceit-widget")
 
 FACEIT_BASE = "https://open.faceit.com/data/v4"
+FACEIT_WEB_BASE = "https://www.faceit.com/api/stats/v1"
 DISCORD_BASE = "https://discord.com/api/v9"
-
-STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".faceit_state.json")
 
 MAPS_CDN_BASE = "https://raw.githubusercontent.com/evansvl/faceit-widget/master/maps"
 LEVELS_CDN_BASE = "https://raw.githubusercontent.com/evansvl/faceit-levels/main"
@@ -85,44 +84,27 @@ def map_widget_image(map_key: str) -> str:
     return f"{MAPS_CDN_BASE}/{map_key}.webp?v={MAPS_VERSION}"
 
 
-def load_state() -> dict:
+def fetch_elo_change(player_id: str, won: bool) -> str:
+    # Faceit's open data API does not expose per-match elo, so read the real
+    # delta from the web stats API. It sits behind Cloudflare, which blocks
+    # plain httpx on a TLS fingerprint, so use curl_cffi to impersonate a
+    # browser. The most recent rated game carries the elo_delta field.
     try:
-        with open(STATE_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
-
-
-def save_state(state: dict) -> None:
-    try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(state, f)
-    except OSError as e:
-        log.warning("Could not persist elo state: %r", e)
-
-
-def compute_elo_change(match_id: str, current_elo: int, won: bool) -> str:
-    state = load_state()
-    # "elo before the current match" baseline; fall back to legacy "elo" field.
-    base = state.get("base_elo", state.get("elo"))
-
-    if match_id and match_id != state.get("match_id"):
-        # New match: its baseline is the elo we saw during the previous match.
-        base = state.get("last_elo", state.get("elo"))
-
-    if base is not None:
-        d = current_elo - int(base)
-        change = f"+{d}" if d >= 0 else str(d)
-    else:
-        change = "+25" if won else "-25"
-
-    save_state({
-        "match_id": match_id,
-        "base_elo": base,
-        "last_elo": current_elo,
-        "elo_change": change,
-    })
-    return change
+        r = cffi_requests.get(
+            f"{FACEIT_WEB_BASE}/stats/time/users/{player_id}/games/cs2",
+            params={"size": 5},
+            impersonate="chrome",
+            timeout=20,
+        )
+        r.raise_for_status()
+        for game in r.json():
+            delta = game.get("elo_delta")
+            if delta not in (None, ""):
+                d = int(delta)
+                return f"+{d}" if d >= 0 else str(d)
+    except Exception as e:
+        log.warning("elo_delta fetch failed, falling back to fixed value: %r", e)
+    return "+25" if won else "-25"
 
 
 def fetch_faceit_data(client: httpx.Client) -> dict:
@@ -170,7 +152,7 @@ def fetch_faceit_data(client: httpx.Client) -> dict:
                             f"{stats.get('Assists', '0')}"
                         )
                         won = stats.get("Result", "0") == "1"
-        elo_change = compute_elo_change(match_id, current_elo, won)
+        elo_change = fetch_elo_change(player_id, won)
 
     if raw_map_name != "unknown":
         display = raw_map_name[3:] if raw_map_name.startswith(("de_", "cs_")) else raw_map_name

@@ -25,7 +25,7 @@ Discord side first, collect the IDs and token as you go, then fill in FACEIT.
 ### Prerequisites
 
 - Python 3.9+
-- `pip install httpx`
+- `pip install httpx curl_cffi`
 - A Discord account and a FACEIT account
 
 ### 1. Create the Discord application
@@ -255,7 +255,7 @@ journalctl -u faceit-widget -f
 ```dockerfile
 FROM python:3.12-slim
 WORKDIR /app
-RUN pip install --no-cache-dir httpx
+RUN pip install --no-cache-dir httpx curl_cffi
 COPY faceit.py .
 CMD ["python", "faceit.py"]
 ```
@@ -274,8 +274,8 @@ docker run -d --restart unless-stopped \
 ### Anything else
 
 `nohup python faceit.py &`, a `screen`/`tmux` session, a free-tier worker, a
-Raspberry Pi — it only needs Python, `httpx`, the environment variables, and
-outbound HTTPS.
+Raspberry Pi — it only needs Python, `httpx`, `curl_cffi`, the environment
+variables, and outbound HTTPS.
 
 ---
 
